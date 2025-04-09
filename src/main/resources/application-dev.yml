@@ -19,3 +19,4 @@ application:
 
   imageServerURL: [http://ims.cytomine.local]
   retrievalServerURL: http://cbir.cytomine.local
+  samServerURL: http://sam.cytomine.local

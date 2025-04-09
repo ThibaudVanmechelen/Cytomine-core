@@ -18,6 +18,7 @@ package be.cytomine.api.controller.ontology;
 
 import be.cytomine.api.controller.RestCytomineController;
 import be.cytomine.api.controller.utils.AnnotationListingBuilder;
+import be.cytomine.config.properties.ApplicationProperties;
 import be.cytomine.domain.CytomineDomain;
 import be.cytomine.domain.image.CompanionFile;
 import be.cytomine.domain.image.ImageInstance;
@@ -25,6 +26,7 @@ import be.cytomine.domain.ontology.*;
 import be.cytomine.domain.security.SecUser;
 import be.cytomine.dto.SimplifiedAnnotation;
 import be.cytomine.exceptions.CytomineMethodNotYetImplementedException;
+import be.cytomine.exceptions.ForbiddenException;
 import be.cytomine.exceptions.ObjectNotFoundException;
 import be.cytomine.exceptions.WrongArgumentException;
 import be.cytomine.repository.*;
@@ -49,6 +51,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.http.HttpStatus;
 
 import javax.persistence.EntityManager;
 import java.io.IOException;
@@ -61,6 +66,10 @@ import java.util.stream.Collectors;
 @Slf4j
 @RequiredArgsConstructor
 public class RestAnnotationDomainController extends RestCytomineController {
+
+    private final ApplicationProperties applicationProperties;
+
+    private final RestTemplate restTemplate;
 
     private final AnnotationListingService annotationListingService;
 
@@ -593,5 +602,46 @@ public class RestAnnotationDomainController extends RestCytomineController {
             return responseSuccess(userAnnotationService.doCorrectUserAnnotation(idsUserAnnotation, location, remove));
         }
 
+    }
+
+
+    @PostMapping("/annotation/{id}/sam")
+    public ResponseEntity<JsonObject> processAnnotationWithSam(@PathVariable Long id) {
+        AnnotationDomain annotation = AnnotationDomain.getAnnotationDomain(entityManager, id);
+
+        if (!annotation.isUserAnnotation()) {
+            throw new WrongArgumentException("Only user annotations can be processed with SAM.");
+        }
+
+        Long userId = AnnotationDomain.getDataFromDomain(annotation).getJSONAttrLong("user");
+        Long secUserId = secUserService.getCurrentUser().getId();
+
+        if (!userId.equals(secUserId)) {
+            throw new ForbiddenException("You are not allowed to process this annotation with SAM");
+        }
+
+        String samServerURL = applicationProperties.getSamServerURL();
+        String url = samServerURL + "/api/autonomous_prediction?annotation_id=" + id;
+
+        try {
+            ResponseEntity<String> samResponse = restTemplate.postForEntity(url, null, String.class);
+    
+            JsonObject json = new JsonObject();
+            json.put("message", samResponse.getBody());
+
+            return ResponseEntity.status(samResponse.getStatusCode()).body(json);
+
+        } catch (HttpStatusCodeException e) {
+            JsonObject json = new JsonObject();
+            json.put("message", e.getResponseBodyAsString());
+
+            return ResponseEntity.status(e.getStatusCode()).body(json);
+
+        } catch (Exception e) {
+            JsonObject json = new JsonObject();
+            json.put("message", "Failed to call SAM server: " + e.getMessage());
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(json);
+        }
     }
 }

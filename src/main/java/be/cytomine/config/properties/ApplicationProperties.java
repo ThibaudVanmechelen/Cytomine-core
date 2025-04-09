@@ -100,6 +100,8 @@ public class ApplicationProperties {
 
     private String retrievalServerURL;
 
+    private String samServerURL;
+
     private Software software;
 
     private Annotation annotation;
