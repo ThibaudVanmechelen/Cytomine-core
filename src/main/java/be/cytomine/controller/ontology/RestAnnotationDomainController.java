@@ -20,6 +20,7 @@ import be.cytomine.domain.security.SecUser;
 import be.cytomine.dto.annotation.SimplifiedAnnotation;
 import be.cytomine.dto.image.CropParameter;
 import be.cytomine.exceptions.CytomineMethodNotYetImplementedException;
+import be.cytomine.exceptions.ForbiddenException;
 import be.cytomine.exceptions.ObjectNotFoundException;
 import be.cytomine.exceptions.WrongArgumentException;
 import be.cytomine.repository.*;
@@ -42,6 +43,10 @@ import be.cytomine.utils.JsonObject;
 @RequestMapping("/api")
 @RestController
 public class RestAnnotationDomainController extends RestCytomineController {
+
+    private final ApplicationProperties applicationProperties;
+
+    private final RestTemplate restTemplate;
 
     private final AnnotationListingService annotationListingService;
 
@@ -420,6 +425,47 @@ public class RestAnnotationDomainController extends RestCytomineController {
             return responseSuccess(reviewedAnnotationService.doCorrectReviewedAnnotation(idsReviewedAnnotation, location, remove));
         } else {
             return responseSuccess(userAnnotationService.doCorrectUserAnnotation(idsUserAnnotation, location, remove));
+        }
+    }
+
+
+    @PostMapping("/annotation/{id}/sam")
+    public ResponseEntity<JsonObject> processAnnotationWithSam(@PathVariable Long id) {
+        AnnotationDomain annotation = AnnotationDomain.getAnnotationDomain(entityManager, id);
+
+        if (!annotation.isUserAnnotation()) {
+            throw new WrongArgumentException("Only user annotations can be processed with SAM.");
+        }
+
+        Long userId = AnnotationDomain.getDataFromDomain(annotation).getJSONAttrLong("user");
+        Long secUserId = secUserService.getCurrentUser().getId();
+
+        if (!userId.equals(secUserId)) {
+            throw new ForbiddenException("You are not allowed to process this annotation with SAM");
+        }
+
+        String samServerURL = applicationProperties.getSamServerURL();
+        String url = samServerURL + "/api/autonomous_prediction?annotation_id=" + id;
+
+        try {
+            ResponseEntity<String> samResponse = restTemplate.postForEntity(url, null, String.class);
+    
+            JsonObject json = new JsonObject();
+            json.put("message", samResponse.getBody());
+
+            return ResponseEntity.status(samResponse.getStatusCode()).body(json);
+
+        } catch (HttpStatusCodeException e) {
+            JsonObject json = new JsonObject();
+            json.put("message", e.getResponseBodyAsString());
+
+            return ResponseEntity.status(e.getStatusCode()).body(json);
+
+        } catch (Exception e) {
+            JsonObject json = new JsonObject();
+            json.put("message", "Failed to call SAM server: " + e.getMessage());
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(json);
         }
     }
 }
