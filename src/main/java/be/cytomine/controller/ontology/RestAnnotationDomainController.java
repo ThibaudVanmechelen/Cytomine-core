@@ -9,8 +9,10 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.locationtech.jts.io.ParseException;
 import org.springframework.cloud.gateway.mvc.ProxyExchange;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.HttpStatusCodeException;
 
 import be.cytomine.controller.RestCytomineController;
 import be.cytomine.domain.CytomineDomain;
@@ -37,6 +39,7 @@ import be.cytomine.service.utils.SimplifyGeometryService;
 import be.cytomine.utils.AnnotationListingBuilder;
 import be.cytomine.utils.GeometryUtils;
 import be.cytomine.utils.JsonObject;
+import be.cytomine.config.properties.ApplicationProperties;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -444,7 +447,7 @@ public class RestAnnotationDomainController extends RestCytomineController {
             throw new ForbiddenException("You are not allowed to process this annotation with SAM");
         }
 
-        String samServerURL = applicationProperties.getSamServerURL();
+        String samServerURL = applicationProperties.getInternalProxyURL() + "/sam";
         String url = samServerURL + "/api/autonomous_prediction?annotation_id=" + id;
 
         try {
