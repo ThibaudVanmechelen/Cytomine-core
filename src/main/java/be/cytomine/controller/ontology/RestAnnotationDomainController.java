@@ -1,6 +1,7 @@
 package be.cytomine.controller.ontology;
 
 import java.io.IOException;
+import java.net.URI;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -13,6 +14,7 @@ import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import be.cytomine.controller.RestCytomineController;
 import be.cytomine.domain.CytomineDomain;
@@ -447,8 +449,12 @@ public class RestAnnotationDomainController extends RestCytomineController {
             throw new ForbiddenException("You are not allowed to process this annotation with SAM");
         }
 
-        String samServerURL = applicationProperties.getInternalProxyURL() + "/sam";
-        String url = samServerURL + "/api/autonomous_prediction?annotation_id=" + id;
+        URI url = UriComponentsBuilder
+            .fromHttpUrl(applicationProperties.getInternalProxyURL())
+            .path("/sam/autonomous_prediction")
+            .queryParam("annotation_id", id)
+            .build()
+            .toUri();
 
         try {
             ResponseEntity<String> samResponse = restTemplate.postForEntity(url, null, String.class);
